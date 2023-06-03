@@ -1,6 +1,6 @@
 #include "lexer.hpp"
 
-Token::Token(TK kind, unsigned int pos, unsigned int line, unsigned int col, unsigned int len, std::string content)
+Token::Token(TokenKind kind, unsigned int pos, unsigned int line, unsigned int col, unsigned int len, std::string content)
     : kind(kind), pos(pos), line(line), col(col), len(len), content(content) {}
 
 bool is_operand(const Token& t) {
@@ -58,16 +58,41 @@ void Lexer::lex_number(std::ifstream& file) {
 }
 
 bool Lexer::match_sequence (std::ifstream& file, std::string str) {
-    for (unsigned int i = 0; i < str.length(); i++) {
+    char savec = c;
+    std::streampos save = file.tellg();
+
+    content =+ c;
+    while (content.length() < str.length() && c != '\n' && !file.eof()) {
         file >> std::noskipws >> c;
-        if (file.eof() || c != str[i]) {
-            for (unsigned int j = 0; j < i + 1; j++) {
-                file.unget();
-            }
-            return false;
-        }
+        content += c;
     }
-    return true;
+
+    // std::cout << str << " is equal to " << content;
+    // std::cin.get();
+    if (content == str) {
+        // std::cout << " (SUCCESS) "<< std::endl;
+        content = "";
+        file >> std::noskipws >> c;
+        return true;
+    }
+    else {
+        // std::cout << " (FAILURE) "<< std::endl;
+        content = "";
+        c = savec;
+        file.seekg(save);
+        return false;
+    }
+    // for (unsigned int i = 0; i < str.length(); i++) {
+    //     std::cout << c;
+    //     if (file.eof() || c != str[i]) {
+    //         file.seekg(save);
+    //         std::cout << " (FAILURE) "<< std::endl;
+    //         return false;
+    //     }
+    //     file >> std::noskipws >> c;
+    // }
+    // std::cout << " (SUCCESS) "<< std::endl;
+    // return true;
 }
 
 std::vector<Token> Lexer::operator() (std::ifstream& file) {
@@ -96,9 +121,41 @@ std::vector<Token> Lexer::operator() (std::ifstream& file) {
         }
 
         bool found = false;
+        for (const auto& [key, value] : op3_to_kind) {
+            if (match_sequence(file, key)) {
+                tokens.push_back(Token(value, pos, line + 1, pos - bol + 1, key.length(), key));
+                pos += key.length();
+                found = true;
+                break;
+            }
+        }
+        if (found) continue;
+        for (const auto& [key, value] : op2_to_kind) {
+            if (match_sequence(file, key)) {
+                tokens.push_back(Token(value, pos, line + 1, pos - bol + 1, key.length(), key));
+                pos += key.length();
+                found = true;
+                break;
+            }
+        }
+        if (found) continue;
         for (const auto& [key, value] : op_to_kind) {
             if (match_sequence(file, key)) {
                 tokens.push_back(Token(value, pos, line + 1, pos - bol + 1, key.length(), key));
+                pos += key.length();
+                found = true;
+                break;
+            }
+        }
+        if (found) continue;
+        for (const auto& [key, value] : op2_to_2kind) {
+            if (match_sequence(file, key)) {
+                if (is_operand(tokens[tokens.size() - 1])) {
+                    tokens.push_back(Token(value[0], pos, line + 1, pos - bol + 1, key.length(), key));
+                }
+                else {
+                    tokens.push_back(Token(value[1], pos, line + 1, pos - bol + 1, key.length(), key));
+                }
                 pos += key.length();
                 found = true;
                 break;
